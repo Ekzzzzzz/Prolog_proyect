@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Horarios</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sistema de Asignación de Horarios</h1>
+            <p>Gestión Académica Institucional</p>
+        </div>
+        <div class="controls">
+            <button class="btn" onclick="getDocentes()">Ver Docentes</button>
+            <button class="btn" onclick="getCursos()">Ver Cursos</button>
+            <button class="btn" onclick="getDisponibilidad()">Ver Disponibilidad</button>
+            <button class="btn" onclick="getCronograma()">Ver Cronograma</button>
+            <button class="btn btn-clear" onclick="limpiarCronograma()">Limpiar Cronograma</button>
+            <button class="btn btn-add" onclick="mostrarFormularios()">Insertar Datos</button>
+        </div>
+        <div class="output-section">
+            <h3 class="output-title">Resultados de Consulta</h3>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Procesando consulta...</p>
+            </div>
+            <div id="salida"></div>
+        </div>
+    </div>
+    <script src="/js/app.js"></script>
+</body>
+</html>
