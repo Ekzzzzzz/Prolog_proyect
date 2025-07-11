@@ -1,232 +1,222 @@
-Sistema de Coordinación Académica
-Un sistema inteligente para la asignación automática de horarios académicos que integra Prolog como motor de inferencia con Node.js para la interfaz web.
-🎯 Características Principales
+Sistema de Asignación Académica Automatizado
+🎓 Descripción
+Sistema automatizado para la asignación de cursos académicos que utiliza Prolog como motor lógico de backtracking y Node.js para la interfaz web. El sistema resuelve automáticamente la asignación de cursos a profesores, horarios y aulas sin intervención manual del usuario.
+🚀 Características
 
-Motor de Inferencia Prolog: Utiliza backtracking para resolver conflictos de horarios automáticamente
-Interfaz Web Intuitiva: Panel de control moderno para coordinadores académicos
-Asignación Inteligente: Evita conflictos de horarios, aulas y docentes
-Validación en Tiempo Real: Verifica disponibilidad y competencias antes de asignar
-Generación Automática: Crea horarios completos optimizados
-
-🏗️ Arquitectura del Sistema
-Componentes Principales
-
-Backend Prolog (academic_system.pl)
-
-Hechos: Docentes, cursos, aulas, laboratorios, disponibilidad
-Reglas: Lógica para evitar conflictos y validar asignaciones
-Predicados: Interfaz de comunicación con Node.js
-
-
-Servidor Node.js (server.js)
-
-API RESTful para comunicación con el frontend
-Interfaz con Prolog mediante procesos del sistema
-Manejo de errores y validación de datos
-
-
-Frontend Web (index.html)
-
-Interfaz moderna y responsiva
-Comunicación asíncrona con el backend
-Visualización de horarios y resultados
-
-
-
-🧠 Lógica de Prolog Explicada
-Hechos Base
-prolog% Docentes con sus especialidades
-docente(d001, 'Dr. Carlos Mendoza', sistemas).
-
-% Cursos con información completa
-curso(mat101, 'Matematica I', 4, 1, aula, 28).
-
-% Disponibilidad de docentes
-disponible(d001, lunes, bloque_1).
-
-% Infraestructura disponible
-aula(a101, 30).
-laboratorio(lab_sistemas, 25, computacion).
-Reglas Críticas
-1. Evitar Conflictos de Docentes
-prologno_conflicto_docente(Docente, Dia, Bloque) :-
-    \+ (asignacion(_, Docente, Dia, Bloque, _, _),
-        asignacion(_, Docente, Dia, Bloque, _, _)).
-2. Evitar Conflictos de Ambientes
-prologno_conflicto_ambiente(Ambiente, Dia, Bloque) :-
-    \+ (asignacion(_, _, Dia, Bloque, Ambiente, _),
-        asignacion(_, _, Dia, Bloque, Ambiente, _)).
-3. Validar Competencias
-prologdocente_competente(Docente, Curso) :-
-    docente(Docente, _, Especialidad),
-    requiere_competencia(Curso, Especialidad).
-4. Verificar Capacidades
-prologcapacidad_suficiente(Curso, Ambiente) :-
-    curso(Curso, _, _, _, aula, EstudiantesEstimados),
-    aula(Ambiente, Capacidad),
-    EstudiantesEstimados =< Capacidad.
-Predicado Principal de Asignación
-prologasignar_curso(Curso, Docente, Dia, Bloque, Ambiente, Semestre) :-
-    % Verificaciones secuenciales con backtracking
-    curso(Curso, _, _, SemestreCurso, _, _),
-    Semestre = SemestreCurso,
-    disponible(Docente, Dia, Bloque),
-    docente_competente(Docente, Curso),
-    ambiente_correcto(Curso, Ambiente),
-    capacidad_suficiente(Curso, Ambiente),
-    no_conflicto_docente(Docente, Dia, Bloque),
-    no_conflicto_ambiente(Ambiente, Dia, Bloque).
-🔧 Integración Técnica
-Comunicación Prolog-Node.js
-La comunicación se realiza mediante:
-
-Ejecución de Procesos: Node.js lanza procesos SWI-Prolog
-Archivos Temporales: Consultas dinámicas via archivos .pl
-Parsing de Resultados: Conversión de respuestas Prolog a JSON
-
-javascriptasync consultarProlog(consulta) {
-    const tempFile = 'temp_query.pl';
-    const queryContent = `
-        :- consult('academic_system.pl').
-        :- ${consulta}, write_canonical(Result), nl, halt.
-    `;
-    
-    fs.writeFileSync(tempFile, queryContent);
-    const queryProcess = spawn('swipl', ['-q', '-t', 'halt', '-s', tempFile]);
-    // ... manejo de respuesta
-}
-API RESTful
-
-GET /api/docentes - Obtener lista de docentes
-GET /api/cursos - Obtener lista de cursos
-GET /api/ambientes - Obtener ambientes disponibles
-GET /api/disponibilidad/:docente - Consultar disponibilidad
-POST /api/asignar - Validar asignación manual
-GET /api/generar-horario - Generar horario completo
+Asignación automática: Utiliza backtracking en Prolog para resolver asignaciones
+Detección de conflictos: Identifica automáticamente conflictos de horarios, profesores y aulas
+Interfaz web moderna: Panel de control para coordinadores académicos
+Validación completa: Verifica que se cumplan todas las restricciones académicas
+Sin base de datos: Todos los datos están definidos como hechos en Prolog
 
 📋 Prerrequisitos
+Software requerido:
 
-Node.js (v16 o superior)
+Node.js (v14 o superior)
 SWI-Prolog (v8.0 o superior)
-npm o yarn
+npm (incluido con Node.js)
 
-🚀 Instalación y Configuración
-
-Clonar el repositorio
-
-bashgit clone [url-del-repositorio]
-cd sistema-coordinacion-academica
-
-Instalar dependencias
-
-bashnpm install
-
-Instalar SWI-Prolog
-
-bash# Ubuntu/Debian
-sudo apt-get install swi-prolog
-
-# macOS
+Instalación de SWI-Prolog:
+Windows:
+bash# Descargar desde: https://www.swi-prolog.org/download/stable
+# Instalar el archivo .exe descargado
+macOS:
+bash# Usar Homebrew
 brew install swi-prolog
+Linux (Ubuntu/Debian):
+bashsudo apt-get update
+sudo apt-get install swi-prolog
+Linux (CentOS/RHEL):
+bashsudo yum install pl
+🛠️ Instalación
+1. Clonar/Descargar el proyecto
+bash# Si tienes git instalado
+git clone <repository-url>
+cd sistema-asignacion-academica
 
-# Windows
-# Descargar desde https://www.swi-prolog.org/download/stable
+# O descargar y extraer los archivos manualmente
+2. Instalar dependencias de Node.js
+bashnpm install
+3. Verificar instalación de Prolog
+bashswipl --version
+4. Estructura de archivos requerida
+sistema-asignacion-academica/
+├── server.js                 # Servidor Node.js
+├── academic_system.pl        # Lógica Prolog
+├── package.json             # Configuración npm
+├── public/
+│   └── index.html           # Interfaz web
+└── README.md               # Este archivo
+🚀 Ejecución
+Iniciar el servidor:
+bashnpm start
+Para desarrollo (con auto-reload):
+bashnpm run dev
+Acceder a la interfaz:
+Abrir navegador en: http://localhost:3000
+📊 Uso del Sistema
+Como Coordinador Académico:
 
-Crear archivos necesarios
+Abrir la interfaz web en http://localhost:3000
+Presionar "Generar Cronograma Automático"
 
-bash# Crear archivo Prolog
-touch academic_system.pl
-
-# Crear directorio público
-mkdir public
-
-Configurar archivos
+El sistema ejecutará automáticamente la lógica Prolog
+Resolverá todas las asignaciones usando backtracking
+Mostrará el cronograma generado
 
 
-Copiar el contenido de academic_system.pl al archivo
-Copiar el contenido de index.html a public/index.html
-Copiar el contenido de server.js al archivo principal
+Revisar los resultados:
 
-🏃‍♂️ Ejecución
-bash# Modo desarrollo
-npm run dev
+✅ Cronograma válido: Sin conflictos detectados
+❌ Cronograma inválido: Con conflictos que requieren atención
 
-# Modo producción
+
+Consultar estadísticas del sistema
+Exportar o imprimir el cronograma generado
+
+Funcionalidades disponibles:
+
+Visualización del cronograma: Tabla con todas las asignaciones
+Detección de conflictos: Lista de conflictos encontrados
+Estadísticas del sistema: Métricas del cronograma generado
+Consultas específicas: Por profesor, aula o horario
+
+🔧 Configuración
+Modificar datos del sistema:
+Editar el archivo academic_system.pl para cambiar:
+prolog% Agregar nuevos profesores
+profesor(nuevo_profesor).
+
+% Agregar nuevos cursos
+curso(nuevo_curso, tipo, semestre).
+
+% Agregar nuevas aulas
+aula(nueva_aula, tipo_aula).
+
+% Agregar disponibilidad
+disponible(profesor, horario).
+Cambiar semestre activo:
+prolog% Cambiar el semestre que se procesará
+semestre_activo(2).  % Cambiar de 1 a 2, etc.
+🧪 Pruebas y Validación
+Verificar que Prolog funciona:
+bashswipl -q -t "write('Prolog funcionando correctamente'), nl, halt."
+Probar la lógica directamente:
+bashswipl academic_system.pl
+En la consola de Prolog:
+prolog?- ejecutar_sistema.
+Verificar la comunicación Node.js - Prolog:
+bash# Iniciar el servidor
 npm start
-El sistema estará disponible en http://localhost:3000
-💡 Decisiones de Diseño
-¿Por qué Prolog?
 
-Backtracking Natural: Ideal para resolver problemas de satisfacción de restricciones
-Lógica Declarativa: Permite expresar reglas de negocio de forma natural
-Flexibilidad: Fácil modificación de reglas sin cambiar el código base
-Eficiencia: Optimización automática de búsquedas y resolución
+# En otro terminal, probar la API
+curl http://localhost:3000/api/info
+📈 API Endpoints
+Endpoints disponibles:
 
-¿Por qué Node.js?
+GET / - Interfaz web principal
+POST /api/generar-cronograma - Generar cronograma automático
+GET /api/estadisticas - Obtener estadísticas del sistema
+GET /api/profesor/:nombre - Consultar asignaciones de un profesor
+GET /api/aula/:nombre - Consultar ocupación de un aula
+GET /api/info - Información del sistema
 
-Integración Sencilla: Fácil comunicación con procesos del sistema
-Ecosistema Rico: Amplia variedad de librerías y herramientas
-Performance: Excelente para aplicaciones I/O intensivas
-Desarrollo Rápido: Prototipado y despliegue ágil
+🔍 Resolución de Problemas
+Error: "swipl: command not found"
+bash# Verificar que SWI-Prolog esté instalado
+which swipl
 
-Arquitectura Sin Base de Datos
+# Si no está instalado, instalarlo según el OS
+Error: "No se pudo generar cronograma"
 
-Simplicidad: Menos componentes = menos complejidad
-Portabilidad: Fácil despliegue en diferentes entornos
-Foco en Lógica: Concentración en algoritmos de asignación
-Prototipado Rápido: Desarrollo y pruebas aceleradas
+Verificar que academic_system.pl esté en el directorio raíz
+Comprobar que la sintaxis Prolog sea correcta
+Verificar que haya suficientes recursos (profesores, aulas, horarios)
 
-🎛️ Uso del Sistema
-Panel de Coordinador
+Error: "ENOENT: no such file or directory"
+bash# Verificar que todos los archivos estén presentes
+ls -la academic_system.pl server.js package.json
+Puerto ya en uso:
+bash# Cambiar el puerto en server.js
+const PORT = 3001; // Cambiar de 3000 a 3001
+🏗️ Arquitectura del Sistema
+Componentes principales:
 
-Asignación Manual
+Motor Prolog (academic_system.pl):
 
-Seleccionar curso, docente, horario y ambiente
-Validación automática de conflictos
-Feedback inmediato sobre viabilidad
-
-
-Generación Automática
-
-Crear horarios completos optimizados
-Resolución automática de conflictos
-Visualización en formato tabla
-
-
-Consulta de Disponibilidad
-
-Ver horarios disponibles por docente
-Planificación de asignaciones futuras
+Hechos del sistema (profesores, cursos, aulas)
+Reglas de asignación
+Algoritmo de backtracking
+Detección de conflictos
 
 
+Servidor Node.js (server.js):
 
-Reglas de Validación
+API REST
+Comunicación con Prolog via child_process
+Procesamiento de resultados
+Servicio de archivos estáticos
 
-✅ Un docente no puede tener dos clases simultáneas
-✅ Un ambiente no puede ser usado por dos cursos a la vez
-✅ Los docentes deben tener competencias para el curso
-✅ La capacidad del ambiente debe ser suficiente
-✅ Los laboratorios deben ser del tipo correcto
 
-🔍 Algoritmo de Backtracking
-El sistema utiliza el backtracking natural de Prolog para:
+Interfaz Web (public/index.html):
 
-Explorar Espacios de Solución: Probar todas las combinaciones posibles
-Detectar Conflictos: Retroceder cuando encuentra restricciones violadas
-Optimizar Asignaciones: Encontrar la mejor distribución de recursos
-Garantizar Consistencia: Asegurar que todas las reglas se cumplan
+Panel de control para coordinadores
+Visualización de cronogramas
+Manejo de estados del sistema
+Exportación de resultados
 
-📊 Beneficios del Sistema
 
-Automatización: Reduce trabajo manual del coordinador
-Optimización: Maximiza uso de recursos disponibles
-Flexibilidad: Fácil adaptación a cambios en requisitos
-Confiabilidad: Elimina errores humanos en asignaciones
-Escalabilidad: Maneja crecimiento en cursos y docentes
 
-🛠️ Extensiones Futuras
+Flujo de ejecución:
 
-Integración con sistemas de gestión académica
-Algoritmos genéticos para optimización avanzada
-Interfaz móvil para coordinadores
-Reportes y anál
+Coordinador presiona "Generar Cronograma"
+Node.js ejecuta el archivo Prolog
+Prolog resuelve las asignaciones usando backtracking
+Node.js procesa la salida de Prolog
+Interfaz muestra los resultados al coordinador
+
+📝 Reglas del Sistema
+Restricciones implementadas:
+
+Un profesor no puede estar en dos lugares a la vez
+Un aula no puede tener dos clases simultáneas
+Los cursos de laboratorio solo van a laboratorios
+Un profesor no puede dictar el mismo curso dos veces
+Todos los cursos del semestre deben ser asignados
+
+Detección de conflictos:
+
+Conflicto de profesor: Asignado a múltiples cursos en el mismo horario
+Conflicto de aula: Ocupada por múltiples cursos simultáneamente
+Conflicto de curso: Profesor dicta el mismo curso más de una vez
+
+🤝 Contribuciones
+Para contribuir al proyecto:
+
+Fork el repositorio
+Crear una rama para tu feature (git checkout -b feature/nueva-funcionalidad)
+Commit tus cambios (git commit -am 'Agregar nueva funcionalidad')
+Push a la rama (git push origin feature/nueva-funcionalidad)
+Crear un Pull Request
+
+📄 Licencia
+Este proyecto está bajo la Licencia MIT - ver el archivo LICENSE para más detalles.
+🆘 Soporte
+Para reportar problemas o solicitar ayuda:
+
+Crear un issue en GitHub
+Incluir información del sistema (OS, versión de Node.js, versión de SWI-Prolog)
+Proporcionar logs de error completos
+Describir los pasos para reproducir el problema
+
+🔮 Próximas Funcionalidades
+
+ Soporte para múltiples semestres simultáneos
+ Interfaz para modificar datos sin editar Prolog
+ Exportación a PDF y Excel
+ Optimización de asignaciones por preferencias
+ Historial de cronogramas generados
+ Notificaciones por email para coordinadores
+
+
+Sistema de Asignación Académica Automatizado - Demostrando la integración efectiva entre Prolog y Node.js para resolver problemas complejos de planificación académica.

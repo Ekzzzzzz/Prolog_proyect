@@ -1,83 +1,270 @@
+// Sistema de Asignación Académica - Servidor Node.js
+// Archivo: server.js
+
 const express = require('express');
-const { exec } = require('child_process');
+const { spawn, exec } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+
 const app = express();
+const PORT = 3000;
 
-// Configuración
-app.use(express.static(path.join(__dirname, 'public')));
+// Middleware
 app.use(express.json());
+app.use(express.static('public'));
 
-// Función mejorada para ejecutar Prolog
-function ejecutarProlog(res, consulta) {
-    const cmd = `swipl -q -s prolog/facts/database.pl -s prolog/rules/scheduling.pl -g "${consulta}" -t halt`;
-    
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error en Prolog:', {error, stdout, stderr});
-            return res.status(500).json({ 
-                error: 'Error en el servidor Prolog',
-                details: stderr || error.message
-            });
-        }
+// Ruta principal para servir la interfaz
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Función para ejecutar Prolog y obtener resultados
+function ejecutarProlog() {
+    return new Promise((resolve, reject) => {
+        // Comando para ejecutar SWI-Prolog
+        const comando = 'swipl -q -t "ejecutar_sistema,halt." academic_system.pl';
         
-        try {
-            // Asegura que siempre sea un array
-            let resultado = stdout.trim() === '' ? [] : JSON.parse(stdout);
-            if (!Array.isArray(resultado)) {
-                resultado = [resultado];
+        exec(comando, (error, stdout, stderr) => {
+            if (error) {
+                console.error('Error ejecutando Prolog:', error);
+                reject(`Error ejecutando Prolog: ${error.message}`);
+                return;
             }
-            res.json(resultado);
-        } catch (e) {
-            console.error('Error parseando JSON:', e, '\nRespuesta:', stdout);
-            res.status(500).json({
-                error: 'Error procesando respuesta',
-                raw: stdout
-            });
-        }
+            
+            if (stderr) {
+                console.error('Error en Prolog:', stderr);
+                reject(`Error en Prolog: ${stderr}`);
+                return;
+            }
+            
+            // Procesar la salida de Prolog
+            const resultado = procesarSalidaProlog(stdout);
+            resolve(resultado);
+        });
     });
 }
 
-// API Docentes
-app.get('/api/docentes', (req, res) => ejecutarProlog(res, "consultar_docentes"));
-app.post('/api/docentes', (req, res) => {
-    const { nombre, categoria, experiencia } = req.body;
-    ejecutarProlog(res, `agregar_docente('${nombre}', '${categoria}', ${experiencia})`);
-});
-app.delete('/api/docentes/:id', (req, res) => ejecutarProlog(res, `eliminar_docente(${req.params.id})`));
+// Función para procesar la salida de Prolog
+function procesarSalidaProlog(salida) {
+    const lineas = salida.split('\n').filter(linea => linea.trim() !== '');
+    
+    const resultado = {
+        cronograma: [],
+        estado: 'desconocido',
+        conflictos: [],
+        mensaje: ''
+    };
+    
+    let procesandoCronograma = false;
+    let procesandoConflictos = false;
+    
+    for (const linea of lineas) {
+        if (linea.includes('CRONOGRAMA_GENERADO:')) {
+            procesandoCronograma = true;
+            procesandoConflictos = false;
+            continue;
+        }
+        
+        if (linea.includes('ESTADO_CRONOGRAMA:')) {
+            procesandoCronograma = false;
+            continue;
+        }
+        
+        if (linea.includes('CRONOGRAMA VALIDO')) {
+            resultado.estado = 'valido';
+            resultado.mensaje = 'Cronograma generado exitosamente sin conflictos';
+            continue;
+        }
+        
+        if (linea.includes('CRONOGRAMA INVALIDO')) {
+            resultado.estado = 'invalido';
+            resultado.mensaje = 'Cronograma generado con conflictos detectados';
+            procesandoConflictos = true;
+            continue;
+        }
+        
+        if (linea.includes('ERROR:')) {
+            resultado.estado = 'error';
+            resultado.mensaje = linea.replace('ERROR:', '').trim();
+            continue;
+        }
+        
+        if (procesandoCronograma && linea.includes('ASIGNACION:')) {
+            const asignacion = procesarAsignacion(linea);
+            if (asignacion) {
+                resultado.cronograma.push(asignacion);
+            }
+        }
+        
+        if (procesandoConflictos && linea.includes('CONFLICTO:')) {
+            const conflicto = linea.replace('CONFLICTO:', '').trim();
+            resultado.conflictos.push(conflicto);
+        }
+    }
+    
+    return resultado;
+}
 
-// API Cursos
-app.get('/api/cursos', (req, res) => ejecutarProlog(res, "consultar_cursos"));
-app.post('/api/cursos', (req, res) => {
-    const { nombre, creditos, ciclo } = req.body;
-    ejecutarProlog(res, `agregar_curso('${nombre}', ${creditos}, ${ciclo})`);
-});
-app.delete('/api/cursos/:id', (req, res) => ejecutarProlog(res, `eliminar_curso(${req.params.id})`));
+// Función para procesar una línea de asignación
+function procesarAsignacion(linea) {
+    try {
+        // Formato: "ASIGNACION: curso | profesor | horario | aula"
+        const partes = linea.replace('ASIGNACION:', '').split('|').map(p => p.trim());
+        
+        if (partes.length === 4) {
+            return {
+                curso: partes[0],
+                profesor: partes[1],
+                horario: partes[2],
+                aula: partes[3]
+            };
+        }
+    } catch (error) {
+        console.error('Error procesando asignación:', error);
+    }
+    return null;
+}
 
-// API Disponibilidad
-app.get('/api/disponibilidad', (req, res) => ejecutarProlog(res, "consultar_disponibilidad"));
-app.post('/api/disponibilidad', (req, res) => {
-    const { id_docente, dia, turno, inicio, fin } = req.body;
-    ejecutarProlog(res, `agregar_disponibilidad(${id_docente}, '${dia}', '${turno}', ${inicio}, ${fin})`);
-});
-app.delete('/api/disponibilidad', (req, res) => {
-    const { id_docente, dia, turno, inicio, fin } = req.body;
-    ejecutarProlog(res, `eliminar_disponibilidad(${id_docente}, '${dia}', '${turno}', ${inicio}, ${fin})`);
+// Endpoint para generar cronograma
+app.post('/api/generar-cronograma', async (req, res) => {
+    try {
+        console.log('Iniciando generación de cronograma...');
+        const resultado = await ejecutarProlog();
+        
+        res.json({
+            success: true,
+            data: resultado
+        });
+    } catch (error) {
+        console.error('Error generando cronograma:', error);
+        res.status(500).json({
+            success: false,
+            error: error.toString()
+        });
+    }
 });
 
-// API Cronograma
-app.get('/api/cronograma', (req, res) => ejecutarProlog(res, "consultar_cronograma"));
-app.post('/api/asignaciones', (req, res) => {
-    const { id_curso, id_docente, dia, turno, inicio, fin } = req.body;
-    ejecutarProlog(res, `agregar_asignacion(${id_curso}, ${id_docente}, '${dia}', '${turno}', ${inicio}, ${fin})`);
+// Endpoint para obtener estadísticas del cronograma
+app.get('/api/estadisticas', async (req, res) => {
+    try {
+        const resultado = await ejecutarProlog();
+        
+        const estadisticas = {
+            totalCursos: resultado.cronograma.length,
+            totalProfesores: [...new Set(resultado.cronograma.map(a => a.profesor))].length,
+            totalAulas: [...new Set(resultado.cronograma.map(a => a.aula))].length,
+            totalHorarios: [...new Set(resultado.cronograma.map(a => a.horario))].length,
+            estado: resultado.estado,
+            conflictos: resultado.conflictos.length
+        };
+        
+        res.json({
+            success: true,
+            data: estadisticas
+        });
+    } catch (error) {
+        console.error('Error obteniendo estadísticas:', error);
+        res.status(500).json({
+            success: false,
+            error: error.toString()
+        });
+    }
 });
-app.delete('/api/cronograma', (req, res) => ejecutarProlog(res, "limpiar_cronograma"));
 
-// Manejo de errores
-app.use((req, res) => res.status(404).json({ error: 'Endpoint no encontrado' }));
+// Endpoint para consultar asignaciones por profesor
+app.get('/api/profesor/:nombre', async (req, res) => {
+    try {
+        const nombreProfesor = req.params.nombre;
+        const resultado = await ejecutarProlog();
+        
+        const asignacionesProfesor = resultado.cronograma.filter(
+            asignacion => asignacion.profesor === nombreProfesor
+        );
+        
+        res.json({
+            success: true,
+            data: {
+                profesor: nombreProfesor,
+                asignaciones: asignacionesProfesor,
+                total: asignacionesProfesor.length
+            }
+        });
+    } catch (error) {
+        console.error('Error consultando profesor:', error);
+        res.status(500).json({
+            success: false,
+            error: error.toString()
+        });
+    }
+});
+
+// Endpoint para consultar ocupación de aulas
+app.get('/api/aula/:nombre', async (req, res) => {
+    try {
+        const nombreAula = req.params.nombre;
+        const resultado = await ejecutarProlog();
+        
+        const ocupacionAula = resultado.cronograma.filter(
+            asignacion => asignacion.aula === nombreAula
+        );
+        
+        res.json({
+            success: true,
+            data: {
+                aula: nombreAula,
+                ocupacion: ocupacionAula,
+                total: ocupacionAula.length
+            }
+        });
+    } catch (error) {
+        console.error('Error consultando aula:', error);
+        res.status(500).json({
+            success: false,
+            error: error.toString()
+        });
+    }
+});
+
+// Endpoint para obtener información del sistema
+app.get('/api/info', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            sistema: 'Sistema de Asignación Académica Automatizado',
+            version: '1.0.0',
+            tecnologias: ['Node.js', 'Express', 'SWI-Prolog'],
+            descripcion: 'Sistema automatizado para asignación de cursos usando backtracking en Prolog'
+        }
+    });
+});
+
+// Middleware de manejo de errores
+app.use((err, req, res, next) => {
+    console.error('Error del servidor:', err.stack);
+    res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor'
+    });
+});
 
 // Iniciar servidor
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`Ruta base: ${__dirname}`);
+    console.log(`=== SISTEMA DE ASIGNACIÓN ACADÉMICA ===`);
+    console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
+    console.log(`Presiona Ctrl+C para detener el servidor`);
+    
+    // Verificar si existe el archivo de Prolog
+    if (fs.existsSync('academic_system.pl')) {
+        console.log('✓ Archivo Prolog encontrado: academic_system.pl');
+    } else {
+        console.log('✗ ADVERTENCIA: No se encontró academic_system.pl');
+    }
 });
+
+// Manejo de cierre graceful
+process.on('SIGINT', () => {
+    console.log('\n=== CERRANDO SERVIDOR ===');
+    process.exit(0);
+});
+
+module.exports = app;
