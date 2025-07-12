@@ -1,8 +1,5 @@
-// Sistema de Asignación Académica - Servidor Node.js
-// Archivo: server.js
-
 const express = require('express');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -266,5 +263,95 @@ process.on('SIGINT', () => {
     console.log('\n=== CERRANDO SERVIDOR ===');
     process.exit(0);
 });
+
+app.get('/api/profesores', (req, res) => {
+    const comando = 'swipl -q -s academic_system.pl -g "findall(X, profesor(X), L), write(L), halt."';
+
+    exec(comando, (error, stdout, stderr) => {
+        if (error) {
+            console.error('Error al ejecutar Prolog:', error);
+            res.status(500).json({ error: 'Error al obtener profesores' });
+            return;
+        }
+
+        console.log('Salida de Prolog:', stdout);
+
+        try {
+            const profesores = stdout.trim()
+                .replace(/\[|\]/g, '')                     // quitar corchetes
+                .split(',')                               // separar por coma
+                .map(p => p.trim())                       // quitar espacios
+                .filter(p => p);                          // eliminar vacíos
+
+            const profesoresConDisponibilidad = profesores.map(prof => {
+                // comando para obtener disponibilidad de cada profesor
+                const comandoDisp = `swipl -q -s academic_system.pl -g "findall(H, disponible(${prof}, H), L), write(L), halt."`;
+
+                try {
+                    const salidaDisp = execSync(comandoDisp).toString();
+                    const horarios = salidaDisp
+                        .trim()
+                        .replace(/\[|\]/g, '')
+                        .split(',')
+                        .map(h => h.trim().replace(/_/g, ' '))
+                        .filter(h => h); // eliminar vacíos
+
+                    return {
+                        id: prof.split('_')[1] || prof,
+                        nombre: prof.replace(/_/g, ' '),
+                        disponibilidad: horarios
+                    };
+                } catch (err) {
+                    console.error(`Error obteniendo disponibilidad de ${prof}:`, err);
+                    return {
+                        id: prof.split('_')[1] || prof,
+                        nombre: prof.replace(/_/g, ' '),
+                        disponibilidad: []
+                    };
+                }
+            });
+
+            res.json(profesoresConDisponibilidad);
+        } catch (err) {
+            console.error('Error procesando datos de profesores:', err);
+            res.status(500).json({ error: 'Error procesando datos de profesores' });
+        }
+    });
+});
+
+app.get('/api/cursos-info', (req, res) => {
+  const comando = 'swipl -q -s academic_system.pl -g "listar_cursos, halt."';
+  
+  exec(comando, (error, stdout, stderr) => {
+    if (error) {
+      console.error('Error ejecutando Prolog:', error);
+      res.status(500).json({ error: 'Error al obtener cursos' });
+      return;
+    }
+
+    try {
+      const rawCursos = stdout.trim().match(/curso\(([^)]+)\)/g);
+      if (!rawCursos) {
+        throw new Error('No se encontraron cursos en la salida de Prolog');
+      }
+
+      const cursos = rawCursos.map(curso => {
+        const [nombre, tipo, ciclo] = curso.replace(/curso\(|\)/g, '').split(',').map(s => s.trim());
+        return {
+          id: nombre.split('_')[1] || nombre,
+          nombre: nombre.replace(/_/g, ' '),
+          tipo,
+          ciclo
+        };
+      });
+
+      res.json(cursos);
+    } catch (err) {
+      console.error('Error procesando datos de cursos:', err);
+      res.status(500).json({ error: 'Error procesando datos de cursos' });
+    }
+  });
+});
+
 
 module.exports = app;

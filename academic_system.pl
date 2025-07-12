@@ -212,3 +212,7 @@ consultar_horario(Horario, Cronograma, CursosHorario) :-
     findall(asignacion(Curso, Profesor, Horario, Aula), 
             member(asignacion(Curso, Profesor, Horario, Aula), Cronograma), 
             CursosHorario).
+
+listar_cursos :-
+    findall(curso(Nombre, Tipo, Ciclo), curso(Nombre, Tipo, Ciclo), Lista),
+    write(Lista).
