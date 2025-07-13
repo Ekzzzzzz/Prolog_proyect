@@ -175,31 +175,56 @@ app.get('/api/cursos-info', (req, res) => {
 // Exportar a Google Sheets
 app.post('/api/exportar-sheets', async (req, res) => {
     try {
-        const cronograma = req.body.cronograma;
-        const spreadsheetId = 'YOUR_SPREADSHEET_ID'; // Reemplaza con el ID real
+        const cronograma = req.body.cronograma || [];
+        if (!cronograma.length) {
+            throw new Error('No hay cronograma para exportar');
+        }
 
-        const turnos = { M: [], T: [], N: [] };
+        const spreadsheetId = '1xkxwzInJ6uDK2ENAHYKljQiqDYG8m903dGvXaqYGTtA'; // Reemplaza con el ID real de tu hoja de cálculo
+
+        // Mapear turnos a hojas
+        const turnos = {
+            M: [], // Mañana
+            T: [], // Tarde
+            N: []  // Noche
+        };
+
+        // Clasificar asignaciones por turno
         cronograma.forEach(a => {
-            turnos[a.turno].push([
-                a.curso,
-                a.seccion,
-                a.profesor,
-                a.pabellon,
-                a.piso,
-                a.aula,
-                a.horario
+            const turnoKey = {
+                'm': 'M',
+                't': 'T',
+                'n': 'N'
+            }[a.turno] || 'M'; // Default a 'M' si no coincide
+            turnos[turnoKey].push([
+                a.curso || '',
+                a.seccion || '',
+                a.profesor || '',
+                a.pabellon || '',
+                a.piso || '',
+                a.aula || '',
+                a.horario || ''
             ]);
         });
 
         const sheetTitles = ['Mañana', 'Tarde', 'Noche'];
         for (const [index, title] of sheetTitles.entries()) {
-            await sheets.spreadsheets.batchUpdate({
-                spreadsheetId,
-                resource: {
-                    requests: [{ addSheet: { properties: { title } } }]
-                }
-            }).catch(() => {}); // Si ya existe, lo ignora
+            const turnoKey = ['M', 'T', 'N'][index];
+            const data = turnos[turnoKey];
 
+            // Intentar crear la hoja (ignorar si ya existe)
+            try {
+                await sheets.spreadsheets.batchUpdate({
+                    spreadsheetId,
+                    resource: {
+                        requests: [{ addSheet: { properties: { title } } }]
+                    }
+                });
+            } catch (e) {
+                if (e.code !== 400) throw e; // Ignorar solo errores de "hoja ya existe"
+            }
+
+            // Actualizar datos en la hoja
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: `${title}!A1:G`,
@@ -207,16 +232,23 @@ app.post('/api/exportar-sheets', async (req, res) => {
                 resource: {
                     values: [
                         ['Curso', 'Sección', 'Docente', 'Pabellón', 'Piso', 'Aula', 'Horario'],
-                        ...turnos[['M', 'T', 'N'][index]]
+                        ...data
                     ]
                 }
             });
         }
 
-        res.json({ success: true, spreadsheetId, message: 'Cronograma exportado correctamente' });
+        res.json({
+            success: true,
+            spreadsheetId,
+            message: 'Cronograma exportado correctamente'
+        });
     } catch (error) {
         console.error('Error en /api/exportar-sheets:', error);
-        res.status(500).json({ success: false, error: error.toString() });
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Error desconocido al exportar a Google Sheets'
+        });
     }
 });
 
