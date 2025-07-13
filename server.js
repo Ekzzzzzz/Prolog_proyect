@@ -17,18 +17,19 @@ const auth = new google.auth.GoogleAuth({
 });
 const sheets = google.sheets({ version: 'v4', auth });
 
-// Ruta principal
+// Página principal
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Ejecutar Prolog
-function ejecutarProlog() {
+// Ejecutar Prolog para generar cronograma
+function ejecutarProlog(ciclo, turno) {
     return new Promise((resolve, reject) => {
-        const comando = 'swipl -q -t "ejecutar_sistema,halt." academic_system.pl';
+        const comando = `swipl -q -t "ejecutar_sistema(${ciclo},'${turno}'),halt." academic_system.pl`;
+        console.log('Ejecutando comando:', comando);
         exec(comando, (error, stdout, stderr) => {
             if (error || stderr) {
-                reject(error || stderr);
+                reject(stderr || error.message);
                 return;
             }
             resolve(procesarSalidaProlog(stdout));
@@ -36,7 +37,7 @@ function ejecutarProlog() {
     });
 }
 
-// Procesar salida de Prolog
+// Procesar salida del Prolog
 function procesarSalidaProlog(salida) {
     const lineas = salida.split('\n').filter(linea => linea.trim());
     const resultado = {
@@ -77,12 +78,16 @@ function procesarSalidaProlog(salida) {
         }
         if (procesandoCronograma && linea.includes('ASIGNACION:')) {
             const partes = linea.replace('ASIGNACION:', '').split('|').map(p => p.trim());
-            if (partes.length === 4) {
+            if (partes.length === 8) {
                 resultado.cronograma.push({
-                    curso: partes[0],
-                    profesor: partes[1],
-                    horario: partes[2],
-                    aula: partes[3]
+                    curso: partes[0].replace(/_/g, ' ').toUpperCase(),
+                    seccion: partes[1],
+                    profesor: partes[2].replace(/_/g, ' ').toUpperCase(),
+                    pabellon: partes[3].toUpperCase(),
+                    piso: partes[4],
+                    aula: partes[5],
+                    horario: partes[6],
+                    turno: partes[7].toUpperCase()
                 });
             }
         }
@@ -95,71 +100,74 @@ function procesarSalidaProlog(salida) {
 
 // Generar cronograma
 app.post('/api/generar-cronograma', async (req, res) => {
+    const { ciclo, turno } = req.body;
+    if (!ciclo || !['m', 't', 'n'].includes(turno.toLowerCase())) {
+        return res.status(400).json({ success: false, error: 'Ciclo o turno inválido' });
+    }
     try {
-        const resultado = await ejecutarProlog();
+        const resultado = await ejecutarProlog(ciclo, turno.toLowerCase());
         res.json({ success: true, data: resultado });
     } catch (error) {
+        console.error('Error en /api/generar-cronograma:', error);
         res.status(500).json({ success: false, error: error.toString() });
     }
 });
 
 // Obtener profesores
 app.get('/api/profesores', (req, res) => {
-    const comando = 'swipl -q -s academic_system.pl -g "findall(X, profesor(X), L), write(L), halt."';
+    const comando = 'swipl -q -s academic_system.pl -g "listar_profesores,halt."';
     exec(comando, (error, stdout, stderr) => {
         if (error || stderr) {
-            res.status(500).json({ error: 'Error al obtener profesores' });
-            return;
+            console.error('Error en /api/profesores:', stderr || error.message);
+            return res.status(500).json({ success: false, error: 'Error al obtener profesores' });
         }
         try {
-            const profesores = stdout.trim().replace(/\[|\]/g, '').split(',').map(p => p.trim()).filter(p => p);
-            const profesoresConDisponibilidad = profesores.map(prof => {
-                const comandoDisp = `swipl -q -s academic_system.pl -g "findall(H, disponible(${prof}, H), L), write(L), halt."`;
-                try {
-                    const salidaDisp = require('child_process').execSync(comandoDisp).toString();
-                    const horarios = salidaDisp.trim().replace(/\[|\]/g, '').split(',').map(h => h.trim().replace(/_/g, ' ')).filter(h => h);
-                    return {
-                        id: prof.split('_')[1] || prof,
-                        nombre: prof.replace(/_/g, ' '),
-                        disponibilidad: horarios
-                    };
-                } catch (err) {
-                    return {
-                        id: prof.split('_')[1] || prof,
-                        nombre: prof.replace(/_/g, ' '),
-                        disponibilidad: []
-                    };
-                }
-            });
-            res.json(profesoresConDisponibilidad);
+            const match = stdout.match(/PROFESORES:\[(.*?)\]/);
+            if (!match) throw new Error('Formato de salida inválido');
+
+            const profesoresRaw = match[1].split(',').map(p => p.trim()).filter(Boolean);
+            const profesores = profesoresRaw.map(prof => ({
+                id: prof.split('_')[1] || prof,
+                nombre: prof.replace(/_/g, ' ').toUpperCase(),
+                disponibilidad: ['Todos los horarios'] // Dummy info, mejora si tu Prolog devuelve disponibilidad real
+            }));
+
+            res.json({ success: true, data: profesores });
         } catch (err) {
-            res.status(500).json({ error: 'Error procesando profesores' });
+            console.error('Error procesando profesores:', err);
+            res.status(500).json({ success: false, error: 'Error procesando profesores' });
         }
     });
 });
 
 // Obtener cursos
 app.get('/api/cursos-info', (req, res) => {
-    const comando = 'swipl -q -s academic_system.pl -g "listar_cursos, halt."';
+    const comando = 'swipl -q -s academic_system.pl -g "listar_cursos,halt."';
     exec(comando, (error, stdout, stderr) => {
         if (error || stderr) {
-            res.status(500).json({ error: 'Error al obtener cursos' });
-            return;
+            console.error('Error en /api/cursos-info:', stderr || error.message);
+            return res.status(500).json({ success: false, error: 'Error al obtener cursos' });
         }
         try {
-            const rawCursos = stdout.trim().match(/curso\(([^)]+)\)/g);
-            const cursos = rawCursos.map(curso => {
-                const [nombre, tipo, ciclo] = curso.replace(/curso\(|\)/g, '').split(',').map(s => s.trim());
+            const match = stdout.match(/CURSOS:\[(.*?)\]/);
+            if (!match) throw new Error('Formato de salida inválido');
+
+            const cursosRaw = match[1].split(',').map(c => c.trim()).filter(Boolean);
+            const cursos = cursosRaw.map(curso => {
+                const [nombre, tipo, ciclo, horas] = curso.split(';').map(s => s.trim());
                 return {
                     id: nombre.split('_')[1] || nombre,
-                    nombre: nombre.replace(/_/g, ' '),
-                    tipo,
-                    ciclo
+                    nombre: nombre.replace(/_/g, ' ').toUpperCase(),
+                    tipo: tipo.charAt(0).toUpperCase() + tipo.slice(1),
+                    ciclo,
+                    horas
                 };
             });
-            res.json(cursos);
+
+            res.json({ success: true, data: cursos });
         } catch (err) {
-            res.status(500).json({ error: 'Error procesando cursos' });
+            console.error('Error procesando cursos:', err);
+            res.status(500).json({ success: false, error: 'Error procesando cursos' });
         }
     });
 });
@@ -168,43 +176,46 @@ app.get('/api/cursos-info', (req, res) => {
 app.post('/api/exportar-sheets', async (req, res) => {
     try {
         const cronograma = req.body.cronograma;
-        const spreadsheetId = '1xkxwzInJ6uDK2ENAHYKljQiqDYG8m903dGvXaqYGTtA'; // Replace with your Google Sheet ID
+        const spreadsheetId = 'YOUR_SPREADSHEET_ID'; // Reemplaza con el ID real
 
-        const shiftMap = {
-            'lunes_8': 'Morning', 'martes_8': 'Morning', 'miercoles_8': 'Morning', 'jueves_8': 'Morning', 'viernes_8': 'Morning',
-            'lunes_14': 'Afternoon', 'martes_14': 'Afternoon', 'miercoles_14': 'Afternoon', 'jueves_14': 'Afternoon', 'viernes_14': 'Afternoon',
-            'lunes_18': 'Evening', 'martes_18': 'Evening', 'miercoles_18': 'Evening', 'jueves_18': 'Evening', 'viernes_18': 'Evening'
-        };
-
-        // Group by shift
-        const shifts = { Morning: [], Afternoon: [], Evening: [] };
+        const turnos = { M: [], T: [], N: [] };
         cronograma.forEach(a => {
-            const shift = shiftMap[a.horario] || 'Morning';
-            shifts[shift].push([a.curso, a.profesor, a.horario, a.aula]);
+            turnos[a.turno].push([
+                a.curso,
+                a.seccion,
+                a.profesor,
+                a.pabellon,
+                a.piso,
+                a.aula,
+                a.horario
+            ]);
         });
 
-        // Create or update sheets
-        const sheetTitles = ['Morning', 'Afternoon', 'Evening'];
-        for (const title of sheetTitles) {
+        const sheetTitles = ['Mañana', 'Tarde', 'Noche'];
+        for (const [index, title] of sheetTitles.entries()) {
             await sheets.spreadsheets.batchUpdate({
                 spreadsheetId,
                 resource: {
-                    requests: [{
-                        addSheet: { properties: { title } }
-                    }]
+                    requests: [{ addSheet: { properties: { title } } }]
                 }
-            }).catch(() => {}); // Ignore if sheet exists
+            }).catch(() => {}); // Si ya existe, lo ignora
 
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
-                range: `${title}!A1:D`,
+                range: `${title}!A1:G`,
                 valueInputOption: 'RAW',
-                resource: { values: [['Curso', 'Profesor', 'Horario', 'Aula'], ...shifts[title]] }
+                resource: {
+                    values: [
+                        ['Curso', 'Sección', 'Docente', 'Pabellón', 'Piso', 'Aula', 'Horario'],
+                        ...turnos[['M', 'T', 'N'][index]]
+                    ]
+                }
             });
         }
 
-        res.json({ success: true, spreadsheetId, message: 'Cronograma exportado a Google Sheets' });
+        res.json({ success: true, spreadsheetId, message: 'Cronograma exportado correctamente' });
     } catch (error) {
+        console.error('Error en /api/exportar-sheets:', error);
         res.status(500).json({ success: false, error: error.toString() });
     }
 });
@@ -212,15 +223,4 @@ app.post('/api/exportar-sheets', async (req, res) => {
 // Iniciar servidor
 app.listen(PORT, () => {
     console.log(`Servidor ejecutándose en http://localhost:${PORT}`);
-});
-
-app.get('/api/test-sheets', async (req, res) => {
-    try {
-        const response = await sheets.spreadsheets.get({
-            spreadsheetId: '1xkxwzInJ6uDK2ENAHYKljQiqDYG8m903dGvXaqYGTtA'
-        });
-        res.json({ success: true, message: 'Conexión exitosa', title: response.data.properties.title });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.toString() });
-    }
 });

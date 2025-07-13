@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema de Asignación Académica</title>
-    <link rel="stylesheet" type="text/css" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css" />
+
+    <!-- Íconos opcionales de Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
 </head>
 <body>
     <div class="container">
@@ -16,6 +19,24 @@
 
         <!-- Controles -->
         <section class="controls">
+            <select id="cicloSelect">
+                <option value="">Selecciona Ciclo</option>
+                <option value="1">Ciclo 1</option>
+                <option value="2">Ciclo 2</option>
+                <option value="3">Ciclo 3</option>
+                <option value="4">Ciclo 4</option>
+                <option value="5">Ciclo 5</option>
+                <option value="6">Ciclo 6</option>
+                <option value="7">Ciclo 7</option>
+            </select>
+
+            <select id="turnoSelect">
+                <option value="">Selecciona Turno</option>
+                <option value="m">Mañana</option>
+                <option value="t">Tarde</option>
+                <option value="n">Noche</option>
+            </select>
+
             <button class="btn" onclick="generarCronograma()">🚀 Generar Cronograma</button>
             <button class="btn info" onclick="getProfesores()">👨‍🏫 Ver Profesores</button>
             <button class="btn info" onclick="getCursosInfo()">📚 Ver Cursos</button>
@@ -26,7 +47,7 @@
         <section class="status" id="status">
             <h3>
                 <span class="status-indicator" id="statusIndicator"></span>
-                <span id="statusText">Sistema listo - Presiona "Generar Cronograma" para iniciar</span>
+                <span id="statusText">Sistema listo - Selecciona ciclo y turno para generar cronograma</span>
             </h3>
             <p id="statusMessage"></p>
         </section>
@@ -43,26 +64,15 @@
             </div>
         </section>
 
-        <!-- Cronogramas por Turno -->
+        <!-- Cronograma generado -->
         <section class="cronograma-section">
-            <h2>📋 Cronogramas por Turno</h2>
-            <div class="cronograma-grid">
-                <div class="card">
-                    <h3>🌞 Mañana</h3>
-                    <div id="cronogramaMorning"></div>
-                </div>
-                <div class="card">
-                    <h3>🌄 Tarde</h3>
-                    <div id="cronogramaAfternoon"></div>
-                </div>
-                <div class="card">
-                    <h3>🌙 Noche</h3>
-                    <div id="cronogramaEvening"></div>
-                </div>
+            <h2>📋 Cronograma</h2>
+            <div class="card" id="cronogramaContent">
+                <p>Primero debes generar un cronograma.</p>
             </div>
         </section>
 
-        <!-- Conflictos -->
+        <!-- Conflictos detectados -->
         <section class="card">
             <h3>⚠️ Conflictos Detectados</h3>
             <div id="conflictosContent">

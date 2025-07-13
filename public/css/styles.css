@@ -6,13 +6,18 @@
 
 body {
     font-family: 'Arial', sans-serif;
-    background: linear-gradient(rgba(17, 24, 39, 0.9), rgba(31, 41, 55, 0.9));
+    background: 
+        linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+        url('https://www.diariomedico.pe/wp-content/uploads/2022/04/utp-777x437.jpg');
+    background-repeat: no-repeat;
     background-size: cover;
+    background-position: center;
     background-attachment: fixed;
     min-height: 100vh;
     color: #e5e7eb;
     line-height: 1.6;
 }
+
 
 .container {
     max-width: 1400px;
