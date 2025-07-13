@@ -1,33 +1,30 @@
 let cronogramaActual = null;
-let estadisticasActuales = null;
 
-// Función para mostrar loading
+// Mostrar loading
 function mostrarLoading(elementId) {
-    const element = document.getElementById(elementId);
-    element.innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>Procesando con Prolog...</p>
-                </div>
-            `;
+    document.getElementById(elementId).innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Procesando...</p>
+        </div>
+    `;
 }
 
+// Ocultar loading
 function ocultarLoading(elementId) {
-    const element = document.getElementById(elementId);
-    element.innerHTML = ''; // Limpia el contenido
+    document.getElementById(elementId).innerHTML = '';
 }
 
-// Función para mostrar error
+// Mostrar error
 function mostrarError(elementId, mensaje) {
-    const element = document.getElementById(elementId);
-    element.innerHTML = `
-                <div class="error">
-                    <strong>Error:</strong> ${mensaje}
-                </div>
-            `;
+    document.getElementById(elementId).innerHTML = `
+        <div class="error">
+            <strong>Error:</strong> ${mensaje}
+        </div>
+    `;
 }
 
-// Función para actualizar el estado
+// Actualizar estado
 function actualizarEstado(estado, mensaje, detalles = '') {
     const indicator = document.getElementById('statusIndicator');
     const text = document.getElementById('statusText');
@@ -38,98 +35,113 @@ function actualizarEstado(estado, mensaje, detalles = '') {
     messageEl.textContent = detalles;
 }
 
-// Función principal para generar cronograma
+// Generar cronograma
 async function generarCronograma() {
     try {
-        actualizarEstado('cargando', 'Generando cronograma...', 'Ejecutando lógica de Prolog con backtracking');
-        mostrarLoading('cronogramaContent');
+        actualizarEstado('cargando', 'Generando cronograma...', 'Ejecutando backtracking en Prolog');
+        mostrarLoading('cronogramaMorning');
+        mostrarLoading('cronogramaAfternoon');
+        mostrarLoading('cronogramaEvening');
         mostrarLoading('conflictosContent');
 
         const response = await fetch('/api/generar-cronograma', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
         const data = await response.json();
 
         if (data.success) {
             cronogramaActual = data.data;
-            mostrarCronograma(data.data);
+            mostrarCronogramaPorTurno(data.data);
             mostrarConflictos(data.data);
 
-            if (data.data.estado === 'valido') {
-                actualizarEstado('valido', 'Cronograma válido generado', data.data.mensaje);
-            } else {
-                actualizarEstado('invalido', 'Cronograma con conflictos', data.data.mensaje);
-            }
+            actualizarEstado(
+                data.data.estado === 'valido' ? 'valido' : 'invalido',
+                data.data.estado === 'valido' ? 'Cronograma válido' : 'Cronograma con conflictos',
+                data.data.mensaje
+            );
         } else {
             throw new Error(data.error || 'Error desconocido');
         }
     } catch (error) {
         console.error('Error:', error);
         actualizarEstado('invalido', 'Error al generar cronograma', error.message);
-        mostrarError('cronogramaContent', error.message);
+        mostrarError('cronogramaMorning', error.message);
+        mostrarError('cronogramaAfternoon', error.message);
+        mostrarError('cronogramaEvening', error.message);
         mostrarError('conflictosContent', 'No se pudieron detectar conflictos');
     }
 }
 
-// Función para mostrar cronograma
-function mostrarCronograma(data) {
-    const container = document.getElementById('cronogramaContent');
+// Mostrar cronograma por turno
+function mostrarCronogramaPorTurno(data) {
+    const containers = {
+        morning: document.getElementById('cronogramaMorning'),
+        afternoon: document.getElementById('cronogramaAfternoon'),
+        evening: document.getElementById('cronogramaEvening')
+    };
 
-    if (!data.cronograma || data.cronograma.length === 0) {
-        container.innerHTML = '<p>No se generaron asignaciones.</p>';
-        return;
-    }
+    const shiftMap = {
+        'lunes_8': 'morning', 'martes_8': 'morning', 'miercoles_8': 'morning', 'jueves_8': 'morning', 'viernes_8': 'morning',
+        'lunes_14': 'afternoon', 'martes_14': 'afternoon', 'miercoles_14': 'afternoon', 'jueves_14': 'afternoon', 'viernes_14': 'afternoon',
+        'lunes_18': 'evening', 'martes_18': 'evening', 'miercoles_18': 'evening', 'jueves_18': 'evening', 'viernes_18': 'evening'
+    };
 
-    let html = `
-                <table class="cronograma-table">
-                    <thead>
-                        <tr>
-                            <th>Curso</th>
-                            <th>Profesor</th>
-                            <th>Horario</th>
-                            <th>Aula</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
+    // Initialize empty arrays for each shift
+    const cronogramas = { morning: [], afternoon: [], evening: [] };
     data.cronograma.forEach(asignacion => {
-        html += `
-                    <tr>
-                        <td><strong>${asignacion.curso}</strong></td>
-                        <td>${asignacion.profesor}</td>
-                        <td>${asignacion.horario}</td>
-                        <td>${asignacion.aula}</td>
-                    </tr>
-                `;
+        const shift = shiftMap[asignacion.horario] || 'morning';
+        cronogramas[shift].push(asignacion);
     });
 
-    html += `
-                    </tbody>
-                </table>
-                <p style="margin-top: 15px; color: #7f8c8d;">
-                    <strong>Total de asignaciones:</strong> ${data.cronograma.length}
-                </p>
-            `;
+    // Render each shift's table
+    Object.keys(containers).forEach(shift => {
+        const container = containers[shift];
+        const asignaciones = cronogramas[shift];
 
-    container.innerHTML = html;
+        if (!asignaciones || asignaciones.length === 0) {
+            container.innerHTML = '<p>No hay asignaciones para este turno.</p>';
+            return;
+        }
+
+        let html = `
+            <table class="cronograma-table">
+                <thead>
+                    <tr>
+                        <th>Curso</th>
+                        <th>Profesor</th>
+                        <th>Horario</th>
+                        <th>Aula</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        asignaciones.forEach(a => {
+            html += `
+                <tr>
+                    <td>${a.curso}</td>
+                    <td>${a.profesor}</td>
+                    <td>${a.horario}</td>
+                    <td>${a.aula}</td>
+                </tr>
+            `;
+        });
+        html += `
+                </tbody>
+            </table>
+            <p>Total asignaciones: ${asignaciones.length}</p>
+        `;
+        container.innerHTML = html;
+    });
 }
 
-// Función para mostrar conflictos
+// Mostrar conflictos
 function mostrarConflictos(data) {
     const container = document.getElementById('conflictosContent');
 
     if (!data.conflictos || data.conflictos.length === 0) {
-        container.innerHTML = `
-                    <div class="success">
-                        <strong>✅ Sin conflictos detectados</strong><br>
-                        El cronograma cumple con todas las restricciones.
-                    </div>
-                `;
+        container.innerHTML = '<p>✅ Sin conflictos detectados.</p>';
         return;
     }
 
@@ -138,227 +150,18 @@ function mostrarConflictos(data) {
         html += `<li>❌ ${conflicto}</li>`;
     });
     html += '</ul>';
-
-    html += `
-                <p style="margin-top: 15px; color: #e74c3c;">
-                    <strong>Total de conflictos:</strong> ${data.conflictos.length}
-                </p>
-            `;
-
     container.innerHTML = html;
 }
 
-// Función para obtener estadísticas
-async function obtenerEstadisticas() {
-    try {
-        actualizarEstado('cargando', 'Obteniendo estadísticas...', 'Analizando datos del cronograma');
-        mostrarLoading('estadisticasContent');
-
-        const response = await fetch('/api/estadisticas');
-        const data = await response.json();
-
-        if (data.success) {
-            estadisticasActuales = data.data;
-            mostrarEstadisticas(data.data);
-            actualizarEstado('valido', 'Estadísticas actualizadas', 'Datos del sistema obtenidos correctamente');
-        } else {
-            throw new Error(data.error || 'Error obteniendo estadísticas');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        actualizarEstado('invalido', 'Error obteniendo estadísticas', error.message);
-        mostrarError('estadisticasContent', error.message);
-    }
-}
-
-// Función para mostrar estadísticas
-function mostrarEstadisticas(stats) {
-    const container = document.getElementById('estadisticasContent');
-
-    const html = `
-                <div class="estadisticas">
-                    <div class="estadistica">
-                        <h4>${stats.totalCursos}</h4>
-                        <p>Cursos Asignados</p>
-                    </div>
-                    <div class="estadistica">
-                        <h4>${stats.totalProfesores}</h4>
-                        <p>Profesores Activos</p>
-                    </div>
-                    <div class="estadistica">
-                        <h4>${stats.totalAulas}</h4>
-                        <p>Aulas Utilizadas</p>
-                    </div>
-                    <div class="estadistica">
-                        <h4>${stats.totalHorarios}</h4>
-                        <p>Horarios Ocupados</p>
-                    </div>
-                    <div class="estadistica">
-                        <h4>${stats.conflictos}</h4>
-                        <p>Conflictos Detectados</p>
-                    </div>
-                    <div class="estadistica">
-                        <h4>${stats.estado.toUpperCase()}</h4>
-                        <p>Estado del Sistema</p>
-                    </div>
-                </div>
-            `;
-
-    container.innerHTML = html;
-}
-
-// Función para consultar información del sistema
-async function consultarInfo() {
-    try {
-        actualizarEstado('cargando', 'Consultando información...', 'Obteniendo datos del sistema');
-
-        const response = await fetch('/api/info');
-        const data = await response.json();
-
-        if (data.success) {
-            const info = data.data;
-            actualizarEstado('valido', 'Información del sistema',
-                `${info.sistema} v${info.version} - ${info.descripcion}`);
-        } else {
-            throw new Error(data.error || 'Error consultando información');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        actualizarEstado('invalido', 'Error consultando información', error.message);
-    }
-}
-
-// Función para consultar profesor específico
-async function consultarProfesor(nombreProfesor) {
-    try {
-        const response = await fetch(`/api/profesor/${nombreProfesor}`);
-        const data = await response.json();
-
-        if (data.success) {
-            const info = data.data;
-            console.log(`Profesor ${info.profesor}: ${info.total} asignaciones`, info.asignaciones);
-        } else {
-            throw new Error(data.error || 'Error consultando profesor');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-    }
-}
-
-// Función para consultar aula específica
-async function consultarAula(nombreAula) {
-    try {
-        const response = await fetch(`/api/aula/${nombreAula}`);
-        const data = await response.json();
-
-        if (data.success) {
-            const info = data.data;
-            console.log(`Aula ${info.aula}: ${info.total} ocupaciones`, info.ocupacion);
-        } else {
-            throw new Error(data.error || 'Error consultando aula');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-    }
-}
-
-// Inicialización cuando se carga la página
-document.addEventListener('DOMContentLoaded', function () {
-    console.log('=== SISTEMA DE ASIGNACIÓN ACADÉMICA ===');
-    console.log('Interfaz web cargada correctamente');
-    console.log('Esperando instrucciones del coordinador académico...');
-
-    // Obtener información del sistema al cargar
-    consultarInfo();
-});
-
-// Manejo de errores globales
-window.addEventListener('error', function (e) {
-    console.error('Error global:', e.error);
-    actualizarEstado('invalido', 'Error del sistema', e.error.message);
-});
-
-// Funciones de utilidad para el coordinador
-function exportarCronograma() {
-    if (!cronogramaActual) {
-        alert('No hay cronograma para exportar. Genera uno primero.');
-        return;
-    }
-
-    const dataStr = JSON.stringify(cronogramaActual, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-
-    const exportFileDefaultName = 'cronograma_academico.json';
-
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-}
-
-function imprimirCronograma() {
-    if (!cronogramaActual) {
-        alert('No hay cronograma para imprimir. Genera uno primero.');
-        return;
-    }
-
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Cronograma Académico</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; margin: 20px; }
-                            table { width: 100%; border-collapse: collapse; }
-                            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                            th { background-color: #f2f2f2; }
-                            h1 { color: #333; }
-                        </style>
-                    </head>
-                    <body>
-                        <h1>Sistema de Asignación Académica</h1>
-                        <h2>Cronograma Generado</h2>
-                        <p>Estado: ${cronogramaActual.estado}</p>
-                        <p>Fecha: ${new Date().toLocaleDateString()}</p>
-                        
-                        <table>
-                            <tr>
-                                <th>Curso</th>
-                                <th>Profesor</th>
-                                <th>Horario</th>
-                                <th>Aula</th>
-                            </tr>
-                            ${cronogramaActual.cronograma.map(a => `
-                                <tr>
-                                    <td>${a.curso}</td>
-                                    <td>${a.profesor}</td>
-                                    <td>${a.horario}</td>
-                                    <td>${a.aula}</td>
-                                </tr>
-                            `).join('')}
-                        </table>
-                        
-                        ${cronogramaActual.conflictos.length > 0 ? `
-                            <h3>Conflictos Detectados:</h3>
-                            <ul>
-                                ${cronogramaActual.conflictos.map(c => `<li>${c}</li>`).join('')}
-                            </ul>
-                        ` : '<p>Sin conflictos detectados.</p>'}
-                    </body>
-                </html>
-            `);
-    printWindow.document.close();
-    printWindow.print();
-}
+// Obtener profesores
 async function getProfesores() {
     try {
+        mostrarLoading('profesoresContent');
         const response = await fetch('/api/profesores');
         const profesores = await response.json();
 
-        const contenedor = document.getElementById('profesoresContent');
-        contenedor.innerHTML = `
-            <h3>👨‍🏫 Profesores</h3>
-            <table class="tabla-datos">
+        let html = `
+            <table class="cronograma-table">
                 <thead>
                     <tr>
                         <th>Nombre</th>
@@ -366,33 +169,32 @@ async function getProfesores() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${profesores.map(prof => `
-                        <tr>
-                            <td>${prof.nombre}</td>
-                            <td>${prof.disponibilidad.join(', ')}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
         `;
+        profesores.forEach(prof => {
+            html += `
+                <tr>
+                    <td>${prof.nombre}</td>
+                    <td>${prof.disponibilidad.join(', ')}</td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table>';
+        document.getElementById('profesoresContent').innerHTML = html;
     } catch (error) {
-        console.error('Error obteniendo profesores:', error);
-        document.getElementById('profesoresContent').innerHTML = `
-            <h3>👨‍🏫 Profesores</h3>
-            <p>Error al cargar los datos de profesores.</p>
-        `;
+        console.error('Error:', error);
+        mostrarError('profesoresContent', 'Error al cargar profesores');
     }
 }
 
+// Obtener cursos
 async function getCursosInfo() {
     try {
-        const response = await fetch('/api/cursos-info'); 
+        mostrarLoading('cursosContent');
+        const response = await fetch('/api/cursos-info');
         const cursos = await response.json();
 
-        const contenedor = document.getElementById('cursosContent');
-        contenedor.innerHTML = `
-            <h3>📚 Cursos</h3>
-            <table class="tabla-datos">
+        let html = `
+            <table class="cronograma-table">
                 <thead>
                     <tr>
                         <th>Nombre</th>
@@ -401,22 +203,55 @@ async function getCursosInfo() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${cursos.map(curso => `
-                        <tr>
-                            <td>${curso.nombre}</td>
-                            <td>${curso.tipo}</td>
-                            <td>${curso.ciclo}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
         `;
+        cursos.forEach(curso => {
+            html += `
+                <tr>
+                    <td>${curso.nombre}</td>
+                    <td>${curso.tipo}</td>
+                    <td>${curso.ciclo}</td>
+                </tr>
+            `;
+        });
+        html += '</tbody></table>';
+        document.getElementById('cursosContent').innerHTML = html;
     } catch (error) {
-        console.error('Error obteniendo cursos:', error);
-        document.getElementById('cursosContent').innerHTML = `
-            <h3>📚 Cursos</h3>
-            <p>Error al cargar los cursos.</p>
-        `;
+        console.error('Error:', error);
+        mostrarError('cursosContent', 'Error al cargar cursos');
     }
 }
 
+// Exportar a Google Sheets
+async function exportarGoogleSheets() {
+    if (!cronogramaActual) {
+        alert('Genera un cronograma primero.');
+        return;
+    }
+    console.log('Cronograma a exportar:', cronogramaActual);
+
+    try {
+        actualizarEstado('cargando', 'Exportando a Google Sheets...', 'Enviando datos');
+        const response = await fetch('/api/exportar-sheets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cronogramaActual)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            actualizarEstado('valido', 'Exportación exitosa', `Cronograma exportado a Google Sheets (ID: ${data.spreadsheetId})`);
+            alert('Cronograma exportado a Google Sheets.');
+        } else {
+            throw new Error(data.error || 'Error desconocido');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        actualizarEstado('invalido', 'Error en exportación', error.message);
+    }
+}
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Sistema de Asignación Académica cargado');
+});
